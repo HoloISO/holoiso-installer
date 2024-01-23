@@ -1,94 +1,97 @@
 #!/usr/bin/python3
-import wx
-import subprocess
-import threading
+import sys
+from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QVBoxLayout, QWidget, QLabel, QPushButton, QComboBox, QLineEdit, QTextEdit, QHBoxLayout
+from PyQt5.QtCore import Qt, QProcess
 
 DistroName = "HoloISO"
 
-class WelcomePage(wx.Panel):
-    def __init__(self, parent):
+class WelcomePage(QWidget):
+    def __init__(self, next_callback, parent=None):
         super(WelcomePage, self).__init__(parent)
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(wx.StaticText(self, label=f"Welcome to the {DistroName} Installer!"), 0, wx.ALL, 20)
-        self.SetSizerAndFit(sizer)
+        layout = QVBoxLayout(self)
+        label = QLabel(f"Welcome to the {DistroName} Installer!", self)
+        label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(label)
 
-class DriveSelectionPage(wx.Panel):
-    def __init__(self, parent, next_callback, prev_callback):
+        next_button = QPushButton("Next", self)
+        next_button.clicked.connect(next_callback)
+        layout.addWidget(next_button)
+
+class DriveSelectionPage(QWidget):
+    def __init__(self, next_callback, prev_callback, parent=None):
         super(DriveSelectionPage, self).__init__(parent)
 
         self.next_callback = next_callback
         self.prev_callback = prev_callback
 
-        self.drive_var = wx.ComboBox(self, choices=self.get_physical_drives(), style=wx.CB_DROPDOWN)
-        self.username_var = wx.TextCtrl(self)
-        self.password_var = wx.TextCtrl(self, style=wx.TE_PASSWORD)
-        self.root_password_var = wx.TextCtrl(self, style=wx.TE_PASSWORD)
+        layout = QVBoxLayout(self)
 
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(wx.StaticText(self, label="Select Drive:"), 0, wx.ALL, 5)
-        sizer.Add(self.drive_var, 0, wx.ALL | wx.EXPAND, 5)
-        sizer.Add(wx.StaticText(self, label="Username:"), 0, wx.ALL, 5)
-        sizer.Add(self.username_var, 0, wx.ALL | wx.EXPAND, 5)
-        sizer.Add(wx.StaticText(self, label="Password:"), 0, wx.ALL, 5)
-        sizer.Add(self.password_var, 0, wx.ALL | wx.EXPAND, 5)
-        sizer.Add(wx.StaticText(self, label="Root password:"), 0, wx.ALL, 5)
-        sizer.Add(self.root_password_var, 0, wx.ALL | wx.EXPAND, 5)
+        self.drive_var = QComboBox(self)
+        self.username_var = QLineEdit(self)
+        self.password_var = QLineEdit(self)
+        self.password_var.setEchoMode(QLineEdit.Password)
+        self.root_password_var = QLineEdit(self)
+        self.root_password_var.setEchoMode(QLineEdit.Password)
 
-        btn_sizer = wx.BoxSizer(wx.HORIZONTAL)
-        prev_btn = wx.Button(self, label="Previous")
-        prev_btn.Bind(wx.EVT_BUTTON, self.on_prev)
-        install_btn = wx.Button(self, label="Install")
-        install_btn.Bind(wx.EVT_BUTTON, self.on_install)
+        layout.addWidget(QLabel("Select Drive:", self))
+        layout.addWidget(self.drive_var)
+        layout.addWidget(QLabel("Username:", self))
+        layout.addWidget(self.username_var)
+        layout.addWidget(QLabel("Password:", self))
+        layout.addWidget(self.password_var)
+        layout.addWidget(QLabel("Root password:", self))
+        layout.addWidget(self.root_password_var)
 
-        btn_sizer.Add(prev_btn, 0, wx.ALL, 5)
-        btn_sizer.AddStretchSpacer()
-        btn_sizer.Add(install_btn, 0, wx.ALL, 5)
+        btn_layout = QHBoxLayout()
+        prev_btn = QPushButton("Previous", self)
+        prev_btn.clicked.connect(self.on_prev)
+        install_btn = QPushButton("Install", self)
+        install_btn.clicked.connect(self.on_install)
 
-        sizer.Add(btn_sizer, 0, wx.ALL | wx.EXPAND, 5)
-        self.SetSizerAndFit(sizer)
+        btn_layout.addWidget(prev_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(install_btn)
+
+        layout.addLayout(btn_layout)
+
+        # Populate the drive_var dropdown
+        self.drive_var.addItems(self.get_physical_drives())
 
     def get_physical_drives(self):
-        result = subprocess.run(["lsblk", "-n", "-o", "NAME", "-d"], capture_output=True, text=True)
-        drives = result.stdout.strip().split('\n')
+        process = QProcess()
+        process.start("lsblk -n -o NAME -d")
+        process.waitForFinished()
+        result = process.readAllStandardOutput().data().decode('utf-8')
+        drives = result.strip().split('\n')
         return drives
 
-    def on_prev(self, event):
+    def on_prev(self):
         self.prev_callback()
 
-    def on_install(self, event):
-        username = self.username_var.GetValue()
-        password = self.password_var.GetValue()
-        root_password = self.root_password_var.GetValue()
-        drive = self.drive_var.GetValue()
+    def on_install(self):
+        username = self.username_var.text()
+        password = self.password_var.text()
+        root_password = self.root_password_var.text()
+        drive = self.drive_var.currentText()
 
         if username and password and root_password and drive:
             self.next_callback(username, password, root_password, drive)
         else:
-            wx.MessageBox("Please fill in all fields.", "Error", wx.OK | wx.ICON_ERROR)
+            print("Please fill in all fields.")
 
-class InstallationPage(wx.Panel):
-    def __init__(self, parent, prev_callback):
+class InstallationPage(QWidget):
+    def __init__(self, parent=None):
         super(InstallationPage, self).__init__(parent)
 
-        self.prev_callback = prev_callback
+        layout = QVBoxLayout(self)
 
-        self.terminal_text = wx.TextCtrl(self, style=wx.TE_MULTILINE | wx.TE_READONLY | wx.HSCROLL)
+        self.terminal_text = QTextEdit(self)
+        self.terminal_text.setReadOnly(True)
 
-        sizer = wx.BoxSizer(wx.VERTICAL)
-        sizer.Add(wx.StaticText(self, label="Installation Process:"), 0, wx.ALL, 5)
-        sizer.Add(self.terminal_text, 1, wx.ALL | wx.EXPAND, 5)
-        self.SetSizerAndFit(sizer)
+        layout.addWidget(QLabel("Installation Process:", self))
+        layout.addWidget(self.terminal_text)
 
         self.process = None
-        self.timer = wx.Timer(self)
-        self.Bind(wx.EVT_TIMER, self.on_timer, self.timer)
-        self.timer.Start(1000)  # Set the timer interval in milliseconds (1000 ms = 1 sec)
-
-    def on_prev(self, event):
-        if self.process:
-            self.process.terminate()
-        self.timer.Stop()
-        self.prev_callback()
 
     def on_install(self, username, root_password, password, drive):
         self.log_to_terminal("Installation started...")
@@ -96,70 +99,63 @@ class InstallationPage(wx.Panel):
         self.log_to_terminal(f"Username: {username}")
         self.log_to_terminal("Installing...")
 
-        command = ["holoiso_installer", f"--drive {drive} --username {username} --password {password} --root_password {root_password}"]
+        command = f"holoiso_installer --drive {drive} --username {username} --password {password} --root_password {root_password}"
+        self.process = QProcess()
+        self.process.setProcessChannelMode(QProcess.MergedChannels)
+        self.process.readyReadStandardOutput.connect(self.read_output)
+        self.process.start(command)
 
-        try:
-            self.process = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, bufsize=1, universal_newlines=True)
-            threading.Thread(target=self.read_output, args=(self.process.stdout,)).start()
-            threading.Thread(target=self.read_output, args=(self.process.stderr,)).start()
-        except subprocess.CalledProcessError as e:
-            self.log_to_terminal(f"Error: {e}")
-            self.log_to_terminal(e.stderr)
-
-    def read_output(self, stream):
-        for line in iter(stream.readline, ''):
-            wx.CallAfter(self.log_to_terminal, line)
-
-    def on_timer(self, event):
-        if self.process.poll() is not None:  # Check if the process has finished
-            self.timer.Stop()
+    def read_output(self):
+        output = self.process.readAllStandardOutput().data().decode('utf-8')
+        self.log_to_terminal(output)
 
     def log_to_terminal(self, message):
-        self.terminal_text.AppendText(message + "\n")
+        self.terminal_text.append(message)
 
-class InstallerFrame(wx.Frame):
-    def __init__(self, *args, **kw):
-        super(InstallerFrame, self).__init__(*args, **kw)
+    def on_prev(self):
+        if self.process and self.process.state() == QProcess.Running:
+            self.process.terminate()
+            self.process.waitForFinished()
 
-        self.notebook = wx.Notebook(self, style=0)
-        self.notebook.Bind(wx.EVT_NOTEBOOK_PAGE_CHANGED, self.on_page_changed)
+class InstallerApp(QMainWindow):
+    def __init__(self):
+        super(InstallerApp, self).__init__()
 
-        welcome_page = WelcomePage(self.notebook)
-        drive_selection_page = DriveSelectionPage(self.notebook, self.on_next_page, self.on_prev_page)
-        installation_page = InstallationPage(self.notebook, self.on_prev_page)
+        self.central_widget = QStackedWidget(self)
 
-        self.notebook.AddPage(welcome_page, "Welcome")
-        self.notebook.AddPage(drive_selection_page, "Drive Selection")
-        self.notebook.AddPage(installation_page, "Installation Process")
+        welcome_page = WelcomePage(self.on_next_page, self.central_widget)
+        drive_selection_page = DriveSelectionPage(self.on_next_page, self.on_prev_page, self.central_widget)
+        installation_page = InstallationPage(self.central_widget)
 
-        self.sizer = wx.BoxSizer(wx.VERTICAL)
-        self.sizer.Add(self.notebook, 1, wx.EXPAND | wx.ALL, 5)
+        self.central_widget.addWidget(welcome_page)
+        self.central_widget.addWidget(drive_selection_page)
+        self.central_widget.addWidget(installation_page)
 
-        self.SetSizerAndFit(self.sizer)
-        self.SetMinSize((650, 650))
-        self.CentreOnScreen(wx.BOTH)
+        self.setCentralWidget(self.central_widget)
+        self.setMinimumSize(950, 650)
 
-    def on_next_page(self, username, password, root_password, drive):
-        current_page = self.notebook.GetSelection()
-        if current_page < self.notebook.GetPageCount() - 1:
-            self.notebook.SetSelection(current_page + 1)
-            installation_page = self.notebook.GetPage(current_page + 1)
-            installation_page.on_install(username, password, root_password, drive)
+    def on_next_page(self, username=None, password=None, root_password=None, drive=None):
+        current_page = self.central_widget.currentIndex()
+        if current_page < self.central_widget.count() - 1:
+            self.central_widget.setCurrentIndex(current_page + 1)
+            installation_page = self.central_widget.currentWidget()
+
+            if isinstance(installation_page, InstallationPage):
+                installation_page.on_install(username, password, root_password, drive)
 
     def on_prev_page(self):
-        current_page = self.notebook.GetSelection()
+        current_page = self.central_widget.currentIndex()
         if current_page > 0:
-            self.notebook.SetSelection(current_page - 1)
+            self.central_widget.setCurrentIndex(current_page - 1)
 
-    def on_page_changed(self, event):
-        current_page = self.notebook.GetSelection()
-        if current_page == 0:
-            self.SetMinSize((650, 650))
-        else:
-            self.SetMinSize((-1, -1))
+    def closeEvent(self, event):
+        if hasattr(self, 'process') and self.process and self.process.state() == QProcess.Running:
+            self.process.terminate()
+            self.process.waitForFinished()
+        event.accept()
 
 if __name__ == '__main__':
-    app = wx.App(False)
-    frame = InstallerFrame(None, title=f"{DistroName} Installer")
-    frame.Show()
-    app.MainLoop()
+    app = QApplication(sys.argv)
+    installer_app = InstallerApp()
+    installer_app.show()
+    sys.exit(app.exec_())
