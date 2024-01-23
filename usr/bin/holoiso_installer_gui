@@ -196,6 +196,8 @@ class InstallerApp(QMainWindow):
 
         self.setCentralWidget(self.central_widget)
         self.setMinimumSize(950, 700)
+        title=f"{DistroName} Installer"
+        self.setWindowTitle(title)
 
     def on_next_page(self, username=None, password=None, root_password=None, drive=None):
         current_page = self.central_widget.currentIndex()
