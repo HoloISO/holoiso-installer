@@ -1,7 +1,11 @@
 #!/usr/bin/python3
 import sys
-from PyQt5.QtWidgets import QApplication, QMainWindow, QStackedWidget, QVBoxLayout, QWidget, QLabel, QPushButton, QComboBox, QLineEdit, QTextEdit, QHBoxLayout
+from PyQt5.QtWidgets import QVBoxLayout, QApplication, QMainWindow, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget, QLabel, QPushButton, QComboBox, QLineEdit, QTextEdit, QHBoxLayout
 from PyQt5.QtCore import Qt, QProcess
+from PyQt5.QtGui import QFont
+from PyQt5.QtWidgets import QMessageBox
+import subprocess
+import time
 
 DistroName = "HoloISO"
 
@@ -35,6 +39,13 @@ class DriveSelectionPage(QWidget):
 
         layout.addWidget(QLabel("Select Drive:", self))
         layout.addWidget(self.drive_var)
+        self.drive_var.addItem("")
+        # Additional code for displaying drive information
+        self.drive_info_label = QLabel("Drive Information: N/A", self)
+        layout.addWidget(self.drive_info_label)
+        monospace_font = QFont("Monospace")
+        monospace_font.setStyleHint(QFont.TypeWriter)
+        self.drive_info_label.setFont(monospace_font)
         layout.addWidget(QLabel("Username:", self))
         layout.addWidget(self.username_var)
         layout.addWidget(QLabel("Password:", self))
@@ -56,6 +67,20 @@ class DriveSelectionPage(QWidget):
 
         # Populate the drive_var dropdown
         self.drive_var.addItems(self.get_physical_drives())
+        self.drive_var.currentIndexChanged.connect(self.update_drive_info)
+
+        # Create a layout for the page
+        page_layout = QVBoxLayout(self)
+        page_layout.setAlignment(Qt.AlignCenter)
+
+        # Set the maximum size for the page
+        self.setMaximumSize(650, 600)
+
+        # Add existing layout to the page layout
+        page_layout.addLayout(layout)
+
+        # Set size policy to expanding for vertical and horizontal directions
+        self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
 
     def get_physical_drives(self):
         process = QProcess()
@@ -64,6 +89,21 @@ class DriveSelectionPage(QWidget):
         result = process.readAllStandardOutput().data().decode('utf-8')
         drives = result.strip().split('\n')
         return drives
+
+    def update_drive_info(self, index):
+        drive_name = self.drive_var.currentText()
+        try:
+            result = subprocess.run(
+                ["lsblk", "-n", "-o", "name,size,label,model", f"/dev/{drive_name}"],
+                capture_output=True,
+                text=True,
+                check=True,
+            )
+            drive_info = result.stdout.strip()
+            self.drive_info_label.setText(f"Drive Information:\n{drive_info}")
+        except subprocess.CalledProcessError as e:
+            print(f"Error retrieving drive information: {e}")
+            self.drive_info_label.setText("Drive Information: N/A")
 
     def on_prev(self):
         self.prev_callback()
@@ -77,7 +117,7 @@ class DriveSelectionPage(QWidget):
         if username and password and root_password and drive:
             self.next_callback(username, password, root_password, drive)
         else:
-            print("Please fill in all fields.")
+            QMessageBox.warning(self, 'Warning', 'Please fill in all fields.')
 
 class InstallationPage(QWidget):
     def __init__(self, parent=None):
@@ -88,22 +128,34 @@ class InstallationPage(QWidget):
         self.terminal_text = QTextEdit(self)
         self.terminal_text.setReadOnly(True)
 
+        # Set monospace font
+        monospace_font = QFont("Monospace")
+        monospace_font.setStyleHint(QFont.TypeWriter)
+        self.terminal_text.setFont(monospace_font)
+
         layout.addWidget(QLabel("Installation Process:", self))
         layout.addWidget(self.terminal_text)
 
         self.process = None
 
     def on_install(self, username, root_password, password, drive):
-        self.log_to_terminal("Installation started...")
-        self.log_to_terminal(f"Selected Drive: {drive}")
-        self.log_to_terminal(f"Username: {username}")
-        self.log_to_terminal("Installing...")
+        confirmation = QMessageBox.question(self, 'Confirmation', f'Are you sure you want to continue with the installation?\nAll contents and partitions on drive /dev/{drive} will BE ERASED.', QMessageBox.Yes | QMessageBox.No)
 
-        command = f"holoiso_installer --drive {drive} --username {username} --password {password} --root_password {root_password}"
-        self.process = QProcess()
-        self.process.setProcessChannelMode(QProcess.MergedChannels)
-        self.process.readyReadStandardOutput.connect(self.read_output)
-        self.process.start(command)
+        if confirmation == QMessageBox.Yes:
+            self.log_to_terminal("Installation started...")
+            self.log_to_terminal(f"Selected Drive: {drive}")
+            self.log_to_terminal(f"Username: {username}")
+            self.log_to_terminal("Installing...")
+
+            command = f"holoiso_installer --drive {drive} --username {username} --password {password} --root_password {root_password}"
+            self.process = QProcess()
+            self.process.setProcessChannelMode(QProcess.MergedChannels)
+            self.process.readyReadStandardOutput.connect(self.read_output)
+            self.process.start(command)
+        else:
+            self.log_to_terminal("Installation aborted. The installer will shut down in 3 seconds...")
+            time.sleep(3)
+            exit()
 
     def read_output(self):
         output = self.process.readAllStandardOutput().data().decode('utf-8')
@@ -132,7 +184,7 @@ class InstallerApp(QMainWindow):
         self.central_widget.addWidget(installation_page)
 
         self.setCentralWidget(self.central_widget)
-        self.setMinimumSize(950, 650)
+        self.setMinimumSize(950, 700)
 
     def on_next_page(self, username=None, password=None, root_password=None, drive=None):
         current_page = self.central_widget.currentIndex()
