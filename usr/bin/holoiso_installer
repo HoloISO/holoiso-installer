@@ -1,0 +1,101 @@
+#!/bin/bash
+if [[ $EUID -ne 0 ]];
+then
+    exec pkexec --disable-internal-agent "$0" "$@"
+fi
+# JUST AN EXPERIMENTAL THING
+
+case $key in
+    --drive)
+    DRIVEDEVICE="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    --username)
+    HOLOUSER="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    --password)
+    HOLOPASS="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    --root_password)
+    ROOTPASS="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    *)    # unknown option
+    echo "Unknown option: $1"
+    exit 1
+    ;;
+esac
+done
+
+ROOTLOCATION=/tmp/holo_root
+INSTALLLOCATION=${ROOTLOCATION}/holo_root
+HOMELOCATION_TEMP=/tmp/holo_home
+SNAPSHOT_FUTURELOC=${HOMELOCATION_TEMP}/.steamos/installcontainer
+SUBVOL=$(ls /etc/holoinstall | grep holoiso | sed -s 's/.img.zst//g')
+SUBVOLLOCATION=/tmp/subvol
+	
+	DEVICE="/dev/${DRIVEDEVICE}"
+	
+	INSTALLDEVICE="${DEVICE}"
+	
+	echo ${DEVICE} | grep -q -P "^/dev/(nvme|loop|mmcblk)"
+	if [ $? -eq 0 ]; then
+		INSTALLDEVICE="${DEVICE}p"
+	fi
+
+
+	
+	echo "\nCreating partitions..."
+	sfdisk --delete ${DEVICE}
+	wipefs -a ${DEVICE}
+	parted ${DEVICE} mklabel gpt
+	parted ${DEVICE} mkpart primary fat32 2M 256M
+	parted ${DEVICE} set 1 boot on
+	parted ${DEVICE} set 1 esp on
+	parted ${DEVICE} mkpart primary btrfs 256M 15G
+    parted ${DEVICE} mkpart primary ext4 15G 16G
+    parted ${DEVICE} mkpart primary ext4 16G 100%
+	root_partition="${INSTALLDEVICE}2"
+    var_partition="${INSTALLDEVICE}3"
+    home_partition="${INSTALLDEVICE}4"
+	mkfs -t vfat ${INSTALLDEVICE}1
+	fatlabel ${INSTALLDEVICE}1 holo_efi
+	mkfs -t btrfs -f ${root_partition}
+	btrfs filesystem label ${root_partition} holo_root
+    mkfs.ext4 ${var_partition}
+    e2label ${var_partition} holo_var
+    mkfs.ext4 ${home_partition}
+    e2label ${home_partition} holo_home
+
+mount -L holo_root -o compress-force=zstd:1,discard,noatime,nodiratime ${ROOTLOCATION}
+mount -L holo_home ${HOMELOCATION_TEMP}
+
+# Start build deploying here
+mkdir -p ${SNAPSHOT_FUTURELOC} ${INSTALLLOCATION} ${HOMELOCATION_TEMP} ${SNAPSHOT_FUTURELOC} ${SUBVOLLOCATION}
+cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
+zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
+rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+mount -L holo_root -o subvol=rootfs/${SUBVOL},compress-force=zstd:1,discard,noatime,nodiratime ${SUBVOLLOCATION}
+mount -L holo_efi ${SUBVOLLOCATION}/boot/efi
+mount -L holo_home ${SUBVOLLOCATION}/home
+mount -L holo_var ${SUBVOLLOCATION}/var
+arch-chroot ${SUBVOLLOCATION} steamos-readonly disable
+arch-chroot ${SUBVOLLOCATION} holoiso-grub-update
+arch-chroot ${SUBVOLLOCATION} steamos-readonly enable
+mkdir -p ${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/var/overlays/etc/upper
+mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
+echo "\nCreating user ${HOLOUSER}..."
+echo -e "${ROOTPASS}\n${ROOTPASS}" | arch-chroot ${SUBVOLLOCATION} passwd root
+arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
+arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
+echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
+echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
+echo "Finished."
+exit 0
