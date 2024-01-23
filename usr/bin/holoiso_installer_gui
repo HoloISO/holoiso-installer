@@ -3,6 +3,7 @@ import sys
 from PyQt5.QtWidgets import QVBoxLayout, QApplication, QMainWindow, QSizePolicy, QStackedWidget, QVBoxLayout, QWidget, QLabel, QPushButton, QComboBox, QLineEdit, QTextEdit, QHBoxLayout
 from PyQt5.QtCore import Qt, QProcess
 from PyQt5.QtGui import QFont
+from PyQt5.QtCore import QTimer
 from PyQt5.QtWidgets import QMessageBox
 import subprocess
 import time
@@ -151,12 +152,22 @@ class InstallationPage(QWidget):
             self.process = QProcess()
             self.process.setProcessChannelMode(QProcess.MergedChannels)
             self.process.readyReadStandardOutput.connect(self.read_output)
+            self.process.finished.connect(self.on_install_finished)
             self.process.start(command)
         else:
             self.log_to_terminal("Installation aborted. The installer will shut down in 3 seconds...")
             time.sleep(3)
             exit()
+    def on_install_finished(self, exit_code, exit_status):
+        if exit_status == QProcess.NormalExit and exit_code == 0:
+            QMessageBox.warning(self, 'Warning', 'Installation finished!\nYou may reboot your device to try out your installation!')
+            self.log_to_terminal("Closing application in 3 seconds...")
+            QTimer.singleShot(3000, self.close_application)
+        else:
+            self.log_to_terminal(f"Installation failed with exit code {exit_code}.")
 
+    def close_application(self):
+        self.window().close()
     def read_output(self):
         output = self.process.readAllStandardOutput().data().decode('utf-8')
         self.log_to_terminal(output)
