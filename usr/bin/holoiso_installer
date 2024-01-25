@@ -5,6 +5,9 @@ then
 fi
 # JUST AN EXPERIMENTAL THING
 
+while [[ $# -gt 0 ]]
+do
+key="$1"
 case $key in
     --drive)
     DRIVEDEVICE="$2"
@@ -34,7 +37,7 @@ esac
 done
 
 ROOTLOCATION=/tmp/holo_root
-INSTALLLOCATION=${ROOTLOCATION}/holo_root
+INSTALLLOCATION=${ROOTLOCATION}/holo_root/rootfs
 HOMELOCATION_TEMP=/tmp/holo_home
 SNAPSHOT_FUTURELOC=${HOMELOCATION_TEMP}/.steamos/installcontainer
 SUBVOL=$(ls /etc/holoinstall | grep holoiso | sed -s 's/.img.zst//g')
@@ -73,6 +76,8 @@ SUBVOLLOCATION=/tmp/subvol
     mkfs.ext4 ${home_partition}
     e2label ${home_partition} holo_home
 
+mkdir -p ${ROOTLOCATION} ${HOMELOCATION_TEMP}
+
 mount -L holo_root -o compress-force=zstd:1,discard,noatime,nodiratime ${ROOTLOCATION}
 mount -L holo_home ${HOMELOCATION_TEMP}
 
@@ -88,6 +93,7 @@ mount -L holo_home ${SUBVOLLOCATION}/home
 mount -L holo_var ${SUBVOLLOCATION}/var
 arch-chroot ${SUBVOLLOCATION} steamos-readonly disable
 arch-chroot ${SUBVOLLOCATION} holoiso-grub-update
+arch-chroot ${SUBVOLLOCATION} holoiso-postupdate-mgmt
 arch-chroot ${SUBVOLLOCATION} steamos-readonly enable
 mkdir -p ${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/var/overlays/etc/upper
 mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
