@@ -110,5 +110,7 @@ if [[ "$?" -ne "0" ]]; then
 	exit 127
 fi
 
+umount -l ${INSTALLDEVICE}*
+
 echo "Finished."
 exit 0
