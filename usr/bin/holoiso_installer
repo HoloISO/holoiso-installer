@@ -1,4 +1,5 @@
 #!/bin/bash
+set -x
 if [[ $EUID -ne 0 ]];
 then
     exec pkexec --disable-internal-agent "$0" "$@"
@@ -37,7 +38,7 @@ esac
 done
 
 ROOTLOCATION=/tmp/holo_root
-INSTALLLOCATION=${ROOTLOCATION}/holo_root/rootfs
+INSTALLLOCATION=${ROOTLOCATION}/rootfs
 HOMELOCATION_TEMP=/tmp/holo_home
 SNAPSHOT_FUTURELOC=${HOMELOCATION_TEMP}/.steamos/installcontainer
 SUBVOL=$(ls /etc/holoinstall | grep holoiso | sed -s 's/.img.zst//g')
@@ -103,5 +104,11 @@ arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
 arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
 echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
 echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
+
+if [[ "$?" -ne "0" ]]; then
+	echo "Installation failed."
+	exit 127
+fi
+
 echo "Finished."
 exit 0
