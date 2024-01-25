@@ -103,14 +103,15 @@ echo -e "${ROOTPASS}\n${ROOTPASS}" | arch-chroot ${SUBVOLLOCATION} passwd root
 arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
 arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
 echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
+mkdir -p ${SUBVOLLOCATION}/etc/sddm.conf.d/
 echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
+REALEXITCODE="$?"
+umount -l ${INSTALLDEVICE}*
 
-if [[ "$?" -ne "0" ]]; then
+if [[ "${REALEXITCODE}" -ne "0" ]]; then
 	echo "Installation failed."
 	exit 127
 fi
-
-umount -l ${INSTALLDEVICE}*
 
 echo "Finished."
 exit 0
