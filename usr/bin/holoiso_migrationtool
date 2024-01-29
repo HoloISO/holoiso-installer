@@ -5,8 +5,8 @@ then
     exec pkexec --disable-internal-agent "$0" "$@"
 fi
 
-PRE_IMMUTABLE_ROOT="/dev/block/by-name/holo-root"
-PRE_IMMUTABLE_HOME="/dev/block/by-name/holo-home"
+PRE_IMMUTABLE_ROOT="/dev/disk/by-label/holo-root"
+PRE_IMMUTABLE_HOME="/dev/disk/by-label/holo-home"
 
 if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
     REAL_ROOT_PATH=$(realpath ${PRE_IMMUTABLE_ROOT})
@@ -58,7 +58,7 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
 	    btrfs filesystem label ${root_partition} holo_root
         mkfs.ext4 ${var_partition}
         e2label ${var_partition} holo_var
-        
+
         ROOTLOCATION=/tmp/holo_root
         INSTALLLOCATION=${ROOTLOCATION}/rootfs
         HOMELOCATION_TEMP=/tmp/holo_home
