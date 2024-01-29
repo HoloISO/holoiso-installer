@@ -38,9 +38,11 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
         done
 
         INSTALLDEVICE="${REAL_DEVICE}"
+        DRIVENODE=$(echo $INSTALLDEVICE | cut -d '/' -f 3)
 	    echo ${REAL_DEVICE} | grep -q -P "^/dev/(nvme|loop|mmcblk)"
 	    if [ $? -eq 0 ]; then
 		    INSTALLDEVICE="${REAL_DEVICE}p"
+            DRIVENODE=$(echo $INSTALLDEVICE | cut -d '/' -f 3)
 	    fi
         umount /tmp/oldroot
         e2label ${REAL_HOME_PATH} holo_home
@@ -49,8 +51,8 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
         parted ${REAL_DEVICE} rm 1
         sync
         # A little hack to make the home partition at the end of drive
-        sfdisk ${REAL_DEVICE} > /tmp/parttable
-        sed -i 's/$(echo $INSTALLDEVICE | cut -d '/' -f 3)3/$(echo $INSTALLDEVICE | cut -d '/' -f 3)4/g' /tmp/parttable
+        sfdisk -d ${REAL_DEVICE} > /tmp/parttable
+        sed -i "s/${DRIVENODE}3/${DRIVENODE}4/g" /tmp/parttable
         sfdisk --force ${REAL_DEVICE} < /tmp/parttable
         sync && udevadm trigger 
         parted ${REAL_DEVICE} mkpart primary fat32 2M 256M
@@ -64,8 +66,10 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
 	    fatlabel ${INSTALLDEVICE}1 holo_efi
 	    mkfs -t btrfs -f ${root_partition}
 	    btrfs filesystem label ${root_partition} holo_root
-        mkfs.ext4 ${var_partition}
+        mkfs.ext4 -F ${var_partition}
         e2label ${var_partition} holo_var
+        sync && udevadm trigger
+        sleep 2
 
         ROOTLOCATION=/tmp/holo_root
         INSTALLLOCATION=${ROOTLOCATION}/rootfs

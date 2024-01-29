@@ -72,9 +72,9 @@ SUBVOLLOCATION=/tmp/subvol
 	fatlabel ${INSTALLDEVICE}1 holo_efi
 	mkfs -t btrfs -f ${root_partition}
 	btrfs filesystem label ${root_partition} holo_root
-    mkfs.ext4 ${var_partition}
+    mkfs.ext4 -F ${var_partition}
     e2label ${var_partition} holo_var
-    mkfs.ext4 ${home_partition}
+    mkfs.ext4 -F ${home_partition}
     e2label ${home_partition} holo_home
 
 mkdir -p ${ROOTLOCATION} ${HOMELOCATION_TEMP}
