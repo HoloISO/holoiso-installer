@@ -1,0 +1,109 @@
+#!/bin/bash
+
+if [[ $EUID -ne 0 ]];
+then
+    exec pkexec --disable-internal-agent "$0" "$@"
+fi
+
+PRE_IMMUTABLE_ROOT="/dev/block/by-name/holo-root"
+PRE_IMMUTABLE_HOME="/dev/block/by-name/holo-home"
+
+if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
+    REAL_ROOT_PATH=$(realpath ${PRE_IMMUTABLE_ROOT})
+    REAL_HOME_PATH=$(realpath ${PRE_IMMUTABLE_HOME})
+    REAL_DEVICE="/dev/$(lsblk -no pkname ${REAL_ROOT_PATH} | tr -d '[:space:]')"
+    YESNO=$(zenity --question --text "Pre-immutable installation of HoloISO was detected on ${REAL_DEVICE}.\nDo you want to continue to migrate your installation?" --width=700)
+    if [[ "${YESNO}" ]]; then
+        echo "Searching for valid users to migrate..."
+        mkdir /tmp/oldroot
+        mount ${REAL_ROOT_PATH} /tmp/oldroot
+        HOLOUSER=$(cat /etc/passwd | grep home | awk -F':' '{ print $1}')
+        echo "User ${HOLOUSER} detected."
+        while true
+        do
+            echo -n "Enter password for user ${HOLOUSER}: "
+            read HOLOPASS
+            if [[ -n "${HOLOPASS}" ]]; then
+                break
+            fi
+        done
+        while true
+        do
+            echo -n "Enter root user password: "
+            read ROOTPASS
+            if [[ -n "${ROOTPASS}" ]]; then
+                break
+            fi
+        done
+
+        INSTALLDEVICE="${REAL_DEVICE}"
+	    echo ${REAL_DEVICE} | grep -q -P "^/dev/(nvme|loop|mmcblk)"
+	    if [ $? -eq 0 ]; then
+		    INSTALLDEVICE="${REAL_DEVICE}p"
+	    fi
+        umount /tmp/oldroot
+        e2label ${REAL_HOME_PATH} holo_home
+        parted ${REAL_DEVICE} rm 2
+        parted ${REAL_DEVICE} rm 1
+        parted ${REAL_DEVICE} mkpart primary fat32 2M 256M
+	    parted ${REAL_DEVICE} set 1 boot on
+	    parted ${REAL_DEVICE} set 1 esp on
+	    parted ${REAL_DEVICE} mkpart primary btrfs 256M 23G
+        parted ${REAL_DEVICE} mkpart primary ext4 23G 24G
+        root_partition="${INSTALLDEVICE}2"
+        var_partition="${INSTALLDEVICE}3"
+	    mkfs -t vfat ${INSTALLDEVICE}1
+	    fatlabel ${INSTALLDEVICE}1 holo_efi
+	    mkfs -t btrfs -f ${root_partition}
+	    btrfs filesystem label ${root_partition} holo_root
+        mkfs.ext4 ${var_partition}
+        e2label ${var_partition} holo_var
+        
+        ROOTLOCATION=/tmp/holo_root
+        INSTALLLOCATION=${ROOTLOCATION}/rootfs
+        HOMELOCATION_TEMP=/tmp/holo_home
+        SNAPSHOT_FUTURELOC=${HOMELOCATION_TEMP}/.steamos/installcontainer
+        SUBVOL=$(ls /etc/holoinstall | grep holoiso | sed -s 's/.img.zst//g')
+        SUBVOLLOCATION=/tmp/subvol
+
+        mkdir -p ${ROOTLOCATION} ${HOMELOCATION_TEMP}
+
+        mount -L holo_root -o compress-force=zstd:1,discard,noatime,nodiratime ${ROOTLOCATION}
+        mount -L holo_home ${HOMELOCATION_TEMP}
+
+        # Start build deploying here
+        mkdir -p ${SNAPSHOT_FUTURELOC} ${INSTALLLOCATION} ${HOMELOCATION_TEMP} ${SNAPSHOT_FUTURELOC} ${SUBVOLLOCATION}
+        cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
+        zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+        btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
+        rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+        mount -L holo_root -o subvol=rootfs/${SUBVOL},compress-force=zstd:1,discard,noatime,nodiratime ${SUBVOLLOCATION}
+        mount -L holo_efi ${SUBVOLLOCATION}/boot/efi
+        mount -L holo_home ${SUBVOLLOCATION}/home
+        mount -L holo_var ${SUBVOLLOCATION}/var
+        arch-chroot ${SUBVOLLOCATION} steamos-readonly disable
+        arch-chroot ${SUBVOLLOCATION} holoiso-grub-update
+        arch-chroot ${SUBVOLLOCATION} holoiso-postupdate-mgmt
+        arch-chroot ${SUBVOLLOCATION} steamos-readonly enable
+        mkdir -p ${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/var/overlays/etc/upper
+        mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
+        echo "\nCreating user ${HOLOUSER}..."
+        echo -e "${ROOTPASS}\n${ROOTPASS}" | arch-chroot ${SUBVOLLOCATION} passwd root
+        arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
+        arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
+        echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
+        mkdir -p ${SUBVOLLOCATION}/etc/sddm.conf.d/
+        echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
+        REALEXITCODE="$?"
+        umount -l ${INSTALLDEVICE}*
+
+        if [[ "${REALEXITCODE}" -ne "0" ]]; then
+	        echo "Installation failed."
+	        exit 127
+        fi
+
+        echo "Finished. Exiting in 5 seconds..."
+        sleep 5
+        exit 0
+    fi
+fi
