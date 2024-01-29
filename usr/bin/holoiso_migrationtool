@@ -2,7 +2,8 @@
 
 if [[ $EUID -ne 0 ]];
 then
-    exec pkexec --disable-internal-agent "$0" "$@"
+    echo "This must be ran via sudo"
+    exit 127
 fi
 
 PRE_IMMUTABLE_ROOT="/dev/disk/by-label/holo-root"
@@ -12,12 +13,12 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
     REAL_ROOT_PATH=$(realpath ${PRE_IMMUTABLE_ROOT})
     REAL_HOME_PATH=$(realpath ${PRE_IMMUTABLE_HOME})
     REAL_DEVICE="/dev/$(lsblk -no pkname ${REAL_ROOT_PATH} | tr -d '[:space:]')"
-    YESNO=$(zenity --question --text "Pre-immutable installation of HoloISO was detected on ${REAL_DEVICE}.\nDo you want to continue to migrate your installation?" --width=700)
-    if [[ "${YESNO}" ]]; then
+    if zenity --question --text "Pre-immutable installation of HoloISO was detected on ${REAL_DEVICE}.\nDo you want to continue to migrate your installation?" --width=700
+    then
         echo "Searching for valid users to migrate..."
         mkdir /tmp/oldroot
         mount ${REAL_ROOT_PATH} /tmp/oldroot
-        HOLOUSER=$(cat /etc/passwd | grep home | awk -F':' '{ print $1}')
+        HOLOUSER=$(cat /tmp/oldroot/etc/passwd | grep home | awk -F':' '{ print $1}')
         echo "User ${HOLOUSER} detected."
         while true
         do
