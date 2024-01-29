@@ -44,8 +44,15 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
 	    fi
         umount /tmp/oldroot
         e2label ${REAL_HOME_PATH} holo_home
+        sync && udevadm trigger
         parted ${REAL_DEVICE} rm 2
         parted ${REAL_DEVICE} rm 1
+        sync
+        # A little hack to make the home partition at the end of drive
+        sfdisk ${REAL_DEVICE} > /tmp/parttable
+        sed -i 's/$(echo $INSTALLDEVICE | cut -d '/' -f 3)3/$(echo $INSTALLDEVICE | cut -d '/' -f 3)4/g' /tmp/parttable
+        sfdisk --force ${REAL_DEVICE} < /tmp/parttable
+        sync && udevadm trigger 
         parted ${REAL_DEVICE} mkpart primary fat32 2M 256M
 	    parted ${REAL_DEVICE} set 1 boot on
 	    parted ${REAL_DEVICE} set 1 esp on
@@ -107,4 +114,8 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
         sleep 5
         exit 0
     fi
+else
+    echo "Nothing to migrate."
+    sleep 5
+    exit 0
 fi
