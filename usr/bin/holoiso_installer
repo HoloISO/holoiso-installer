@@ -77,41 +77,4 @@ SUBVOLLOCATION=/tmp/subvol
     mkfs.ext4 -F ${home_partition}
     e2label ${home_partition} holo_home
 
-mkdir -p ${ROOTLOCATION} ${HOMELOCATION_TEMP}
-
-mount -L holo_root -o compress-force=zstd:1,discard,noatime,nodiratime ${ROOTLOCATION}
-mount -L holo_home ${HOMELOCATION_TEMP}
-
-# Start build deploying here
-mkdir -p ${SNAPSHOT_FUTURELOC} ${INSTALLLOCATION} ${HOMELOCATION_TEMP} ${SNAPSHOT_FUTURELOC} ${SUBVOLLOCATION}
-cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
-zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
-btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
-rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
-mount -L holo_root -o subvol=rootfs/${SUBVOL},compress-force=zstd:1,discard,noatime,nodiratime ${SUBVOLLOCATION}
-mount -L holo_efi ${SUBVOLLOCATION}/boot/efi
-mount -L holo_home ${SUBVOLLOCATION}/home
-mount -L holo_var ${SUBVOLLOCATION}/var
-arch-chroot ${SUBVOLLOCATION} steamos-readonly disable
-arch-chroot ${SUBVOLLOCATION} holoiso-grub-update
-arch-chroot ${SUBVOLLOCATION} holoiso-postupdate-mgmt
-arch-chroot ${SUBVOLLOCATION} steamos-readonly enable
-mkdir -p ${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/var/overlays/etc/upper
-mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
-echo "\nCreating user ${HOLOUSER}..."
-echo -e "${ROOTPASS}\n${ROOTPASS}" | arch-chroot ${SUBVOLLOCATION} passwd root
-arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
-arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
-echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
-mkdir -p ${SUBVOLLOCATION}/etc/sddm.conf.d/
-echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
-REALEXITCODE="$?"
-umount -l ${INSTALLDEVICE}*
-
-if [[ "${REALEXITCODE}" -ne "0" ]]; then
-	echo "Installation failed."
-	exit 127
-fi
-
-echo "Finished."
-exit 0
+holoiso_bootstrap --username "${HOLOUSER}" --password "${HOLOPASS}" --root_password "${ROOTPASS}"

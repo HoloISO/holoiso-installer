@@ -1,0 +1,77 @@
+#!/bin/bash
+## Installation bootstrapper
+
+while [[ $# -gt 0 ]]
+do
+key="$1"
+case $key in
+    --username)
+    HOLOUSER="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    --password)
+    HOLOPASS="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    --root_password)
+    ROOTPASS="$2"
+    shift # past argument
+    shift # past value
+    ;;
+    *)    # unknown option
+    echo "Unknown option: $1"
+    exit 1
+    ;;
+esac
+done
+
+DRIVEPATHS="/dev/disk/by-label"
+if [[ -L "${DRIVEPATHS}/holo_efi" ]] && [[ -L "${DRIVEPATHS}/holo_root" ]] && [[ -L "${DRIVEPATHS}/holo_var" ]] && [[ -L "${DRIVEPATHS}/holo_home" ]]; then
+ROOTLOCATION=/tmp/holo_root
+INSTALLLOCATION=${ROOTLOCATION}/rootfs
+HOMELOCATION_TEMP=/tmp/holo_home
+SNAPSHOT_FUTURELOC=${HOMELOCATION_TEMP}/.steamos/installcontainer
+SUBVOL=$(ls /etc/holoinstall | grep holoiso | sed -s 's/.img.zst//g')
+SUBVOLLOCATION=/tmp/subvol
+
+mkdir -p ${ROOTLOCATION} ${HOMELOCATION_TEMP}
+
+mount -L holo_root -o compress-force=zstd:1,discard,noatime,nodiratime ${ROOTLOCATION}
+mount -L holo_home ${HOMELOCATION_TEMP}
+
+# Start build deploying here
+mkdir -p ${SNAPSHOT_FUTURELOC} ${INSTALLLOCATION} ${HOMELOCATION_TEMP} ${SNAPSHOT_FUTURELOC} ${SUBVOLLOCATION}
+cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
+zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
+rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+mount -L holo_root -o subvol=rootfs/${SUBVOL},compress-force=zstd:1,discard,noatime,nodiratime ${SUBVOLLOCATION}
+mount -L holo_efi ${SUBVOLLOCATION}/boot/efi
+mount -L holo_home ${SUBVOLLOCATION}/home
+mount -L holo_var ${SUBVOLLOCATION}/var
+arch-chroot ${SUBVOLLOCATION} holoiso-postupdate-mgmt update
+mkdir -p ${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/var/overlays/etc/upper
+mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
+echo "\nCreating user ${HOLOUSER}..."
+echo -e "${ROOTPASS}\n${ROOTPASS}" | arch-chroot ${SUBVOLLOCATION} passwd root
+arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
+arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
+echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
+mkdir -p ${SUBVOLLOCATION}/etc/sddm.conf.d/
+echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
+REALEXITCODE="$?"
+umount -l ${INSTALLDEVICE}*
+
+if [[ "${REALEXITCODE}" -ne "0" ]]; then
+	echo "Installation failed."
+	exit 127
+fi
+
+echo "Finished."
+exit 0
+else
+echo "Partition layout not detected. Aborting bootstrap"
+exit 127
+fi

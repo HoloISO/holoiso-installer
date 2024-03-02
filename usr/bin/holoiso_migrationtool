@@ -12,6 +12,12 @@ PRE_IMMUTABLE_HOME="/dev/disk/by-label/holo-home"
 if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
     REAL_ROOT_PATH=$(realpath ${PRE_IMMUTABLE_ROOT})
     REAL_HOME_PATH=$(realpath ${PRE_IMMUTABLE_HOME})
+    if [[ "$(echo -n ${REAL_ROOT_PATH} | tail -c 1)" -ne "2" ]]; then
+        echo -e "Dual-booted installations are not supported.\nRead https://holoiso.ru.eu.org/get/migrate/ on how to migrate your installation."
+        echo -e "\nInstaller will close in 15 seconds."
+        sleep 15
+        exit 125
+    fi
     REAL_DEVICE="/dev/$(lsblk -no pkname ${REAL_ROOT_PATH} | tr -d '[:space:]')"
     if zenity --question --text "Pre-immutable installation of HoloISO was detected on ${REAL_DEVICE}.\nDo you want to continue to migrate your installation?" --width=700
     then
@@ -70,53 +76,7 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
         e2label ${var_partition} holo_var
         sync && udevadm trigger
         sleep 2
-
-        ROOTLOCATION=/tmp/holo_root
-        INSTALLLOCATION=${ROOTLOCATION}/rootfs
-        HOMELOCATION_TEMP=/tmp/holo_home
-        SNAPSHOT_FUTURELOC=${HOMELOCATION_TEMP}/.steamos/installcontainer
-        SUBVOL=$(ls /etc/holoinstall | grep holoiso | sed -s 's/.img.zst//g')
-        SUBVOLLOCATION=/tmp/subvol
-
-        mkdir -p ${ROOTLOCATION} ${HOMELOCATION_TEMP}
-
-        mount -L holo_root -o compress-force=zstd:1,discard,noatime,nodiratime ${ROOTLOCATION}
-        mount -L holo_home ${HOMELOCATION_TEMP}
-
-        # Start build deploying here
-        mkdir -p ${SNAPSHOT_FUTURELOC} ${INSTALLLOCATION} ${HOMELOCATION_TEMP} ${SNAPSHOT_FUTURELOC} ${SUBVOLLOCATION}
-        cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
-        zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
-        btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
-        rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
-        mount -L holo_root -o subvol=rootfs/${SUBVOL},compress-force=zstd:1,discard,noatime,nodiratime ${SUBVOLLOCATION}
-        mount -L holo_efi ${SUBVOLLOCATION}/boot/efi
-        mount -L holo_home ${SUBVOLLOCATION}/home
-        mount -L holo_var ${SUBVOLLOCATION}/var
-        arch-chroot ${SUBVOLLOCATION} steamos-readonly disable
-        arch-chroot ${SUBVOLLOCATION} holoiso-grub-update
-        arch-chroot ${SUBVOLLOCATION} holoiso-postupdate-mgmt
-        arch-chroot ${SUBVOLLOCATION} steamos-readonly enable
-        mkdir -p ${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/var/overlays/etc/upper
-        mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
-        echo "\nCreating user ${HOLOUSER}..."
-        echo -e "${ROOTPASS}\n${ROOTPASS}" | arch-chroot ${SUBVOLLOCATION} passwd root
-        arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
-        arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
-        echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
-        mkdir -p ${SUBVOLLOCATION}/etc/sddm.conf.d/
-        echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
-        REALEXITCODE="$?"
-        umount -l ${INSTALLDEVICE}*
-
-        if [[ "${REALEXITCODE}" -ne "0" ]]; then
-	        echo "Installation failed."
-	        exit 127
-        fi
-
-        echo "Finished. Exiting in 5 seconds..."
-        sleep 5
-        exit 0
+        holoiso_bootstrap --username "${HOLOUSER}" --password "${HOLOPASS}" --root_password "${ROOTPASS}"
     fi
 else
     echo "Nothing to migrate."
