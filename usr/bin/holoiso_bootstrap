@@ -20,6 +20,21 @@ case $key in
     shift # past argument
     shift # past value
     ;;
+    --reinstall)
+    IS_REINSTALL="1"
+    shift # past argument
+    shift # past value
+    ;;
+    --reset)
+    IS_RESET="1"
+    shift # past argument
+    shift # past value
+    ;;
+    --keepdata)
+    IS_KEEPDATA="1"
+    shift # past argument
+    shift # past value
+    ;;
     *)    # unknown option
     echo "Unknown option: $1"
     exit 1
