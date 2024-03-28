@@ -77,4 +77,5 @@ SUBVOLLOCATION=/tmp/subvol
     mkfs.ext4 -F ${home_partition}
     e2label ${home_partition} holo_home
 
-holoiso_bootstrap --username "${HOLOUSER}" --password "${HOLOPASS}" --root_password "${ROOTPASS}"
+    sync && udevadm trigger
+    holoiso_bootstrap --username "${HOLOUSER}" --password "${HOLOPASS}" --root_password "${ROOTPASS}"
