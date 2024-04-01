@@ -1,0 +1,33 @@
+#!/bin/bash
+while [[ $# -gt 0 ]]
+do
+key="$1"
+case $key in
+    --upgrade)
+    IS_REINSTALL="1"
+    shift # past argument
+    shift # past value
+    ;;
+    --reset)
+    IS_RESET="1"
+    shift # past argument
+    shift # past value
+    ;;
+    *)    # unknown option
+    echo "Unknown option: $1"
+    exit 1
+    ;;
+esac
+done
+
+if [[ "${IS_REINSTALL}" == "1" ]]; then
+    if zenity --question --text "This will upgrade HoloISO installation on $(blkid -L holo_root)\nDo you want to continue?" --width=700
+    then
+    holoiso_bootstrap
+    fi
+elif [[ "${IS_RESET}" == "1" ]]; then
+    if zenity --question --text "This will reset HoloISO installation on $(blkid -L holo_root) to system defaults\nYour username and password will stay intact, but\nyour apps, games, user data, Wi-Fi connections will be lost.\nDo you want to continue?" --width=700
+    then
+    holoiso_bootstrap --reset
+    fi
+fi

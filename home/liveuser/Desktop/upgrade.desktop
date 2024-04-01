@@ -1,13 +1,13 @@
 [Desktop Entry]
 Comment[en_US]=
 Comment=
-Exec=sudo holoiso_migrationtool
+Exec=sudo holoiso_restrap --upgrade
 GenericName[en_US]=
 GenericName=
 Icon=run-install
 MimeType=
-Name[en_US]=Migrate RW HoloISO to RO
-Name=Migrate RW HoloISO to RO
+Name[en_US]=Upgrade existing HoloISO install
+Name=Upgrade existing HoloISO install
 Path=
 StartupNotify=true
 Terminal=true

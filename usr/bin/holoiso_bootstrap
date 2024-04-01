@@ -1,6 +1,6 @@
 #!/bin/bash
 ## Installation bootstrapper
-
+set -x
 
 
 sync && udevadm trigger
@@ -54,7 +54,7 @@ SNAPSHOT_FUTURELOC=${HOMELOCATION_TEMP}/.steamos/installcontainer
 SUBVOL=$(ls /etc/holoinstall | grep holoiso | sed -s 's/.img.zst//g')
 SUBVOLLOCATION=/tmp/subvol
 
-echo "Bootstrapping HoloISO image $SUBVOL..."
+echo "Bootstrapping HoloISO image $SUBVOL on $(blkid -L holo_root)..."
 
 mkdir -p ${ROOTLOCATION} ${HOMELOCATION_TEMP}
 
@@ -67,25 +67,44 @@ echo "Copying image file to home partition..."
 cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
 echo "Decompressing image file..."
 zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+echo "Removing container file..."
+rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
 echo "Installing image file on root partition..."
 btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
-echo "Removing image file..."
-rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+echo "Removing install file..."
+rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
 mount -L holo_root -o subvol=rootfs/${SUBVOL},compress-force=zstd:1,discard,noatime,nodiratime ${SUBVOLLOCATION}
 mount -L holo_efi ${SUBVOLLOCATION}/boot/efi
 mount -L holo_home ${SUBVOLLOCATION}/home
 mount -L holo_var ${SUBVOLLOCATION}/var
 arch-chroot ${SUBVOLLOCATION} holoiso-postupdate-mgmt update
-mkdir -p ${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/var/overlays/etc/upper
-mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
-echo "\nCreating user ${HOLOUSER}..."
-echo -e "${ROOTPASS}\n${ROOTPASS}" | arch-chroot ${SUBVOLLOCATION} passwd root
-arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
-arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
-echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
-echo "Setting gamescope autologin for ${HOLOUSER}..."
-mkdir -p ${SUBVOLLOCATION}/etc/sddm.conf.d/
-echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
+if [[ ! -z "${HOLOUSER}" ]]; then
+    mkdir -p ${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/var/overlays/etc/upper
+    mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
+    echo "\nCreating user ${HOLOUSER}..."
+    echo -e "${ROOTPASS}\n${ROOTPASS}" | arch-chroot ${SUBVOLLOCATION} passwd root
+    arch-chroot ${SUBVOLLOCATION} useradd --create-home ${HOLOUSER}
+    arch-chroot ${SUBVOLLOCATION} usermod -aG wheel ${HOLOUSER}
+    echo -e "${HOLOPASS}\n${HOLOPASS}" | arch-chroot ${SUBVOLLOCATION} passwd ${HOLOUSER}
+    echo "Setting gamescope autologin for ${HOLOUSER}..."
+    mkdir -p ${SUBVOLLOCATION}/etc/sddm.conf.d/
+    echo -e "[General]\nDisplayServer=wayland\n\n[Autologin]\nUser=${HOLOUSER}\nSession=gamescope-wayland.desktop\nRelogin=true\n\n[X11]\n# Janky workaround for wayland sessions not stopping in sddm, kills\n# all active sddm-helper sessions on teardown\nDisplayStopCommand=/usr/bin/gamescope-wayland-teardown-workaround" >> ${SUBVOLLOCATION}/etc/sddm.conf.d/autologin.conf
+elif [[ "${IS_RESET}" == "1" ]]; then
+    mount -t overlay ${SUBVOLLOCATION}/etc -o index=off,metacopy=off,lowerdir=${SUBVOLLOCATION}/etc,upperdir=${SUBVOLLOCATION}/var/overlays/etc/upper,workdir=${SUBVOLLOCATION}/var/overlays/etc/work ${SUBVOLLOCATION}/etc
+    echo "Restoring this installation to system defaults..."
+    RESIDUE=$(find ${SUBVOLLOCATION}/var/overlays/etc/upper | sed 1d | grep -v group | grep -v passwd | grep -v shadow | grep -v sddm.conf.d | grep -v .pwd.lock)
+    if [[ ! -z "${RESIDUE}" ]]; then
+        echo "Removing residue in /etc..."
+        rm -rf ${RESIDUE}
+    fi
+    echo "Removing user folder residue..."
+    rm -rf ${SUBVOLLOCATION}/home/{*,.*}
+    USER=$(cat ${SUBVOLLOCATION}/var/overlays/etc/upper/passwd | grep /home/ | cut -d ':' -f 1)
+    arch-chroot ${SUBVOLLOCATION} mkhomedir_helper ${USER}
+else
+    echo "No user added, assuming upgrade..."    
+fi
+
 REALEXITCODE="$?"
 umount -l ${INSTALLDEVICE}*
 
@@ -94,7 +113,8 @@ if [[ "${REALEXITCODE}" -ne "0" ]]; then
 	exit 127
 fi
 
-echo "Finished."
+echo "Finished, unmounting filesystems..."
+for drive in $(echo "holo_home holo_var holo_root holo_efi"); do umount -l $(blkid -L $drive); done
 exit 0
 else
 echo "Partition layout not detected. Aborting bootstrap"
