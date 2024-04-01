@@ -44,8 +44,7 @@ case $key in
 esac
 done
 
-DRIVEPATHS="/dev/disk/by-label"
-if [[ -L "${DRIVEPATHS}/holo_efi" ]] && [[ -L "${DRIVEPATHS}/holo_root" ]] && [[ -L "${DRIVEPATHS}/holo_var" ]] && [[ -L "${DRIVEPATHS}/holo_home" ]]; then
+if [[ -n "$(blkid | grep holo)" ]]; then
 ROOTLOCATION=/tmp/holo_root
 INSTALLLOCATION=${ROOTLOCATION}/rootfs
 HOMELOCATION_TEMP=/tmp/holo_home
