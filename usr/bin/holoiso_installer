@@ -54,7 +54,7 @@ SUBVOLLOCATION=/tmp/subvol
 
 
 	
-	echo "\nCreating partitions..."
+	echo -e "\nCreating partitions..."
 	sfdisk --delete ${DEVICE}
 	wipefs -a ${DEVICE}
 	parted ${DEVICE} mklabel gpt
