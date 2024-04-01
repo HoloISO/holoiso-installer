@@ -19,7 +19,7 @@ if [[ -L "${PRE_IMMUTABLE_ROOT}" ]] && [[ -L "${PRE_IMMUTABLE_HOME}" ]]; then
         exit 125
     fi
     REAL_DEVICE="/dev/$(lsblk -no pkname ${REAL_ROOT_PATH} | tr -d '[:space:]')"
-    if zenity --question --text "Pre-immutable installation of HoloISO was detected on ${REAL_DEVICE}.\nDo you want to continue to migrate your installation?" --width=700
+    if kdialog --warningyesno "Pre-immutable installation of HoloISO was detected on ${REAL_DEVICE}.\nDo you want to continue to migrate your installation?"
     then
         echo "Searching for valid users to migrate..."
         mkdir /tmp/oldroot

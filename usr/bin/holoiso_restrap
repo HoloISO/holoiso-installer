@@ -21,12 +21,12 @@ esac
 done
 
 if [[ "${IS_REINSTALL}" == "1" ]]; then
-    if zenity --question --text "This will upgrade HoloISO installation on $(blkid -L holo_root)\nDo you want to continue?" --width=700
+    if kdialog --warningyesno "This will upgrade HoloISO installation on $(blkid -L holo_root)\nDo you want to continue?"
     then
     holoiso_bootstrap
     fi
 elif [[ "${IS_RESET}" == "1" ]]; then
-    if zenity --question --text "This will reset HoloISO installation on $(blkid -L holo_root) to system defaults\nYour username and password will stay intact, but\nyour apps, games, user data, Wi-Fi connections will be lost.\nDo you want to continue?" --width=700
+    if kdialog --warningyesno "This will reset HoloISO installation on $(blkid -L holo_root) to system defaults\nYour username and password will stay intact, but\nyour apps, games, user data, Wi-Fi connections will be lost.\nDo you want to continue?"
     then
     holoiso_bootstrap --reset
     fi
