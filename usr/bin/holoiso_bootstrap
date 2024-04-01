@@ -125,6 +125,7 @@ REALEXITCODE="$?"
 if [[ "${REALEXITCODE}" -ne "0" ]]; then
 	echo "Installation failed."
 	exit 127
+    sleep 5
 fi
 
 echo "Finished, unmounting filesystems..."
@@ -134,4 +135,5 @@ exit 0
 else
 echo "Partition layout not detected. Aborting bootstrap"
 exit 127
+sleep 5
 fi
