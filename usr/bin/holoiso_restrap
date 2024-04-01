@@ -24,10 +24,12 @@ if [[ "${IS_REINSTALL}" == "1" ]]; then
     if kdialog --warningyesno "This will upgrade HoloISO installation on $(blkid -L holo_root)\nDo you want to continue?"
     then
     holoiso_bootstrap
+    sleep 5
     fi
 elif [[ "${IS_RESET}" == "1" ]]; then
     if kdialog --warningyesno "This will reset HoloISO installation on $(blkid -L holo_root) to system defaults\nYour username and password will stay intact, but\nyour apps, games, user data, Wi-Fi connections will be lost.\nDo you want to continue?"
     then
     holoiso_bootstrap --reset
+    sleep 5
     fi
 fi
