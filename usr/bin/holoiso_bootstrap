@@ -63,16 +63,33 @@ mount -L holo_home ${HOMELOCATION_TEMP}
 
 # Start build deploying here
 mkdir -p ${SNAPSHOT_FUTURELOC} ${INSTALLLOCATION} ${HOMELOCATION_TEMP} ${SNAPSHOT_FUTURELOC} ${SUBVOLLOCATION}
-echo "Copying image file to home partition..."
-cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
-echo "Decompressing image file..."
-zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
-echo "Removing container file..."
-rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
-echo "Installing image file on root partition..."
-btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
-echo "Removing install file..."
-rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
+if [[ ! -d "${INSTALLLOCATION}/${SUBVOL}"]]; then
+    echo "Copying image file to home partition..."
+    cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
+    echo "Decompressing image file..."
+    zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+    echo "Removing container file..."
+    rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+    echo "Installing image file on root partition..."
+    btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
+    echo "Removing install file..."
+    rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
+elif [[ "${IS_RESET}" == "1" ]]; then
+    echo "Removing current copy of subvolume..."
+    btrfs subvolume delete ${INSTALLLOCATION}/${SUBVOL}
+    echo "Copying image file to home partition..."
+    cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
+    echo "Decompressing image file..."
+    zstd -df ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+    echo "Removing container file..."
+    rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img.zst
+    echo "Installing image file on root partition..."
+    btrfs receive ${INSTALLLOCATION} < ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
+    echo "Removing install file..."
+    rm -rf ${SNAPSHOT_FUTURELOC}/${SUBVOL}.img
+else
+    echo "Installer subvolume already exists on container, skipping bootstrap..."
+fi
 mount -L holo_root -o subvol=rootfs/${SUBVOL},compress-force=zstd:1,discard,noatime,nodiratime ${SUBVOLLOCATION}
 mount -L holo_efi ${SUBVOLLOCATION}/boot/efi
 mount -L holo_home ${SUBVOLLOCATION}/home
@@ -114,7 +131,8 @@ if [[ "${REALEXITCODE}" -ne "0" ]]; then
 fi
 
 echo "Finished, unmounting filesystems..."
-for drive in $(echo "holo_home holo_var holo_root holo_efi"); do umount -l $(blkid -L $drive); done
+for drive in $(echo "holo_home holo_var holo_root holo_efi"); do umount -f $(blkid -L $drive); done
+umount -l ${SUBVOLLOCATION} && umount -l ${HOMELOCATION_TEMP}
 exit 0
 else
 echo "Partition layout not detected. Aborting bootstrap"
