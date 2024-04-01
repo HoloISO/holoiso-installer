@@ -1,7 +1,5 @@
 #!/bin/bash
 ## Installation bootstrapper
-set -x
-
 
 sync && udevadm trigger
 
@@ -123,7 +121,6 @@ else
 fi
 
 REALEXITCODE="$?"
-umount -l ${INSTALLDEVICE}*
 
 if [[ "${REALEXITCODE}" -ne "0" ]]; then
 	echo "Installation failed."

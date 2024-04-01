@@ -1,5 +1,4 @@
 #!/bin/bash
-set -x
 if [[ $EUID -ne 0 ]];
 then
     exec pkexec --disable-internal-agent "$0" "$@"
@@ -78,4 +77,5 @@ SUBVOLLOCATION=/tmp/subvol
     e2label ${home_partition} holo_home
 
     sync && udevadm trigger
+    echo "Starting to bootstrap installation..."
     holoiso_bootstrap --username "${HOLOUSER}" --password "${HOLOPASS}" --root_password "${ROOTPASS}"
