@@ -1,6 +1,8 @@
 #!/bin/bash
 ## Installation bootstrapper
 
+
+
 sync && udevadm trigger
 
 while [[ $# -gt 0 ]]
@@ -52,7 +54,7 @@ SNAPSHOT_FUTURELOC=${HOMELOCATION_TEMP}/.steamos/installcontainer
 SUBVOL=$(ls /etc/holoinstall | grep holoiso | sed -s 's/.img.zst//g')
 SUBVOLLOCATION=/tmp/subvol
 
-echo "Bootstrapping HoloISO image $SUBVOL on /dev/$(lsblk -no pkname $(realpath ${DRIVEPATHS}/holo_root) | tr -d '[:space:]')...."
+echo "Bootstrapping HoloISO image $SUBVOL..."
 
 mkdir -p ${ROOTLOCATION} ${HOMELOCATION_TEMP}
 

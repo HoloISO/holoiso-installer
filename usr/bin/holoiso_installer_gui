@@ -148,7 +148,7 @@ class InstallationPage(QWidget):
             self.log_to_terminal(f"Username: {username}")
             self.log_to_terminal("Installing...")
 
-            command = f"holoiso_installer --drive {drive} --username {username} --password {password} --root_password {root_password}"
+            command = f"holoiso_installer --drive \"{drive}\" --username \"{username}\" --password \"{root_password}\" --root_password \"{password}\""
             self.process = QProcess()
             self.process.setProcessChannelMode(QProcess.MergedChannels)
             self.process.readyReadStandardOutput.connect(self.read_output)
