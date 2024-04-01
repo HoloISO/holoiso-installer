@@ -63,7 +63,7 @@ mount -L holo_home ${HOMELOCATION_TEMP}
 
 # Start build deploying here
 mkdir -p ${SNAPSHOT_FUTURELOC} ${INSTALLLOCATION} ${HOMELOCATION_TEMP} ${SNAPSHOT_FUTURELOC} ${SUBVOLLOCATION}
-if [[ ! -d "${INSTALLLOCATION}/${SUBVOL}"]]; then
+if [[ ! -d "${INSTALLLOCATION}/${SUBVOL}" ]]; then
     echo "Copying image file to home partition..."
     cp /etc/holoinstall/${SUBVOL}.img.zst ${SNAPSHOT_FUTURELOC}/
     echo "Decompressing image file..."
